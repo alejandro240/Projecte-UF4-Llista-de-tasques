@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Llista de Tasques</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    .completed {
+      text-decoration: line-through;
+    }
+    .offline {
+      color: red;
+      font-weight: bold;
+    }
+    .online {
+      color: green;
+      font-weight: bold;
+    }
+  </style>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <h1>Llista de Tasques</h1>
+  
+  <!-- Indicador d'estat de la connexió -->
+  <div id="connectionStatus"></div>
+  
+  <!-- Formulari per afegir tasques -->
+  <form id="taskForm">
+    <input type="text" id="taskInput" placeholder="Nova tasca" required />
+    <button type="submit">Afegeix</button>
+  </form>
+  
+  <!-- Llista on es mostraran les tasques -->
+  <ul id="taskList"></ul>
+  
+  <script src="appTareas.js"></script>
+</body>
+</html>
