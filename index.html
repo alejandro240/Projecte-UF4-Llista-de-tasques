@@ -1,41 +1,31 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="ca">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Llista de Tasques</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-    }
-    .completed {
-      text-decoration: line-through;
-    }
-    .offline {
-      color: red;
-      font-weight: bold;
-    }
-    .online {
-      color: green;
-      font-weight: bold;
-    }
-  </style>
-  <link rel="stylesheet" href="estilos.css">
+  <link rel="stylesheet" href="estils.css" />
 </head>
 <body>
-  <h1>Llista de Tasques</h1>
-  
-  <!-- Indicador d'estat de la connexió -->
-  <div id="connectionStatus"></div>
-  
-  <!-- Formulari per afegir tasques -->
-  <form id="taskForm">
-    <input type="text" id="taskInput" placeholder="Nova tasca" required />
-    <button type="submit">Afegeix</button>
-  </form>
-  
-  <!-- Llista on es mostraran les tasques -->
-  <ul id="taskList"></ul>
-  
+  <main class="app">
+    <header>
+      <h1>🗂️ Les Meves Tasques</h1>
+      <div id="connectionStatus" class="status">🔌 Comprovant connexió...</div>
+    </header>
+
+    <form id="taskForm" autocomplete="off">
+      <input type="text" id="taskInput" placeholder="Escriu una nova tasca..." required />
+      <button type="submit" title="Afegeix tasca">➕</button>
+    </form>
+
+    <section class="buttons">
+      <button id="ordenarCompletes">✔️ Estat</button>
+      <button id="ordenarData">📅 Data</button>
+    </section>
+
+    <ul id="taskList"></ul>
+  </main>
+
   <script src="appTareas.js"></script>
 </body>
 </html>
