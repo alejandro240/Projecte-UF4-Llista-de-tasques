@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ca">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Llista de Tasques</title>
-  <link rel="stylesheet" href="estils.css" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
+
 <body>
   <main class="app">
     <header>
@@ -26,6 +28,19 @@
     <ul id="taskList"></ul>
   </main>
 
-  <script src="appTareas.js"></script>
+  <!-- Finestra modal per editar tasques -->
+  <div id="editModal" class="modal hidden">
+    <div class="modal-content">
+      <h2>✏️ Edita la Tasca</h2>
+      <input type="text" id="editInput" />
+      <div class="modal-actions">
+        <button id="saveEdit" class="save">💾 Desa</button>
+        <button id="cancelEdit" class="cancel">❌ Cancel·la</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js.js"></script>
 </body>
+
 </html>
