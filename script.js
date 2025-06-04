@@ -1,126 +1,103 @@
-/**
- * @file script.js
- * @description Aplicació de Llista de Tasques amb sincronització offline i backend (NodeJS + SQLite).
- * @author Alejandro
- */
+/** Referències als elements del DOM */
+const formulariTasca           = document.getElementById("taskForm");
+const entradaNomTasca          = document.getElementById("taskInput");
+const llistaTasquesDOM         = document.getElementById("taskList");
+const indicadorConnexio        = document.getElementById("connectionStatus");
+const botoOrdenarCompletes     = document.getElementById("ordenarCompletes");
+const botoOrdenarPerData       = document.getElementById("ordenarData");
 
-/** Referencias a elementos DOM */
-const taskForm          = document.getElementById("taskForm");
-const taskInput         = document.getElementById("taskInput");
-const taskList          = document.getElementById("taskList");
-const connectionStatus  = document.getElementById("connectionStatus");
-const ordenarCompletes  = document.getElementById("ordenarCompletes");
-const ordenarData       = document.getElementById("ordenarData");
+const modalEdicio              = document.getElementById("editModal");
+const entradaEdicio            = document.getElementById("editInput");
+const botoGuardarEdicio        = document.getElementById("saveEdit");
+const botoCancel·larEdicio     = document.getElementById("cancelEdit");
 
-const editModal         = document.getElementById("editModal");
-const editInput         = document.getElementById("editInput");
-const saveEdit          = document.getElementById("saveEdit");
-const cancelEdit        = document.getElementById("cancelEdit");
+/** Estat local de les tasques i operacions pendents */
+let llistaTasques              = JSON.parse(localStorage.getItem("tasques")) || [];
+let operacionsPendents         = JSON.parse(localStorage.getItem("pendingSync")) || [];
 
-/** Estado local de tareas y operaciones pendientes */
-let tasques     = JSON.parse(localStorage.getItem("tasques")) || [];
-let pendingSync = JSON.parse(localStorage.getItem("pendingSync")) || [];
+/** Índex de la tasca que s'està editant */
+let indexTascaEnEdicio         = null;
 
-/** Índice de tarea en edición */
-let indexEdicio = null;
-
-/**
- * Guarda en localStorage las variables 'tasques' y 'pendingSync'.
- */
+/** Guarda l'estat local a localStorage */
 function guardarTasques() {
-  localStorage.setItem("tasques", JSON.stringify(tasques));
-  localStorage.setItem("pendingSync", JSON.stringify(pendingSync));
+  localStorage.setItem("tasques", JSON.stringify(llistaTasques));
+  localStorage.setItem("pendingSync", JSON.stringify(operacionsPendents));
 }
 
-/**
- * Obtiene todas las tareas del servidor (GET /tasks) y actualiza 'tasques'.
- * @returns {Promise<void>}
- */
-async function fetchTareasServidor() {
+/** Obté les tasques del servidor i les desa localment */
+async function obtenirTasquesDelServidor() {
   try {
-    const respuesta = await fetch("http://localhost:3000/tasks");
-    if (!respuesta.ok) {
-      console.error("Error HTTP al obtener tareas:", respuesta.status);
+    const resposta = await fetch("http://localhost:3000/tasks");
+    if (!resposta.ok) {
+      console.error("Error HTTP en obtenir tasques:", resposta.status);
       return;
     }
-    /** @type {{ id: number, text: string, completed: boolean }[]} */
-    const datos = await respuesta.json();
 
-    const tareasServidor = datos.map(t => ({
+    const dades = await resposta.json();
+    const tasquesServidor = dades.map(t => ({
       id: t.id,
       nom: t.text,
       completada: t.completed,
       data: new Date().toISOString()
     }));
 
-    tasques = tareasServidor;
+    llistaTasques = tasquesServidor;
     guardarTasques();
     renderitzarTasques();
 
   } catch (error) {
-    console.warn("No se pudo conectar al servidor para obtener tareas:", error.message);
+    console.warn("No s'ha pogut connectar al servidor per obtenir les tasques:", error.message);
   }
 }
 
-/**
- * Sincroniza operaciones pendientes (add, update, delete) con el backend.
- * - Primero envía los “add” para obtener IDs reales.
- * - Luego procesa los “update” (PUT).
- * - Finalmente procesa los “delete” (DELETE).
- * Las operaciones que fallen se agregan de nuevo a 'pendingSync'.
- * @returns {Promise<void>}
- */
+/** Sincronitza les operacions pendents amb el backend */
 async function sincronitzar() {
-  if (!navigator.onLine || pendingSync.length === 0) {
-    console.log("Sincronitzar: no hi ha connexió o no hi ha operacions pendents.");
+  if (!navigator.onLine || operacionsPendents.length === 0) {
+    console.log("Sincronització: no hi ha connexió o operacions pendents.");
     return;
   }
 
-  // Hacemos una copia y vaciamos pendingSync para volver a llenarlo solo con los que fallen
-  const opsPendents = [...pendingSync];
-  pendingSync = [];
+  const operacionsAProcessar = [...operacionsPendents];
+  operacionsPendents = [];
 
-  // 1) PROCESAR “add”
-  for (const op of opsPendents) {
+  // 1. Afegir
+  for (const op of operacionsAProcessar) {
     if (op.accio !== "add") continue;
     const tascaLocal = op.tasca;
     try {
-      const resp = await fetch("http://localhost:3000/tasks", {
+      const resposta = await fetch("http://localhost:3000/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: tascaLocal.nom })
       });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      /** @type {{ id: number, text: string, completed: boolean }} */
-      const datosServidor = await resp.json();
 
-      // Buscar y reemplazar ID temporal
-      const idx = tasques.findIndex(t => t.id === tascaLocal.id);
-      if (idx !== -1) {
-        tasques[idx].id = datosServidor.id;
-        tasques[idx].completada = datosServidor.completed;
+      if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+      const tascaServidor = await resposta.json();
+
+      const index = llistaTasques.findIndex(t => t.id === tascaLocal.id);
+      if (index !== -1) {
+        llistaTasques[index].id = tascaServidor.id;
+        llistaTasques[index].completada = tascaServidor.completed;
       }
-      // No reencolamos porque fue exitoso
+
     } catch (error) {
-      console.error("Error sincronitzant ADD:", error);
-      // Si falla, lo agregamos de nuevo
-      pendingSync.push(op);
+      console.error("Error sincronitzant (afegir):", error);
+      operacionsPendents.push(op);
     }
   }
 
-  // 2) PROCESAR “update”
-  for (const op of opsPendents) {
+  // 2. Actualitzar
+  for (const op of operacionsAProcessar) {
     if (op.accio !== "update") continue;
     const tascaLocal = op.tasca;
 
-    // Si todavía es ID negativo, significa que no se creó aún; reencolamos
     if (tascaLocal.id < 0) {
-      pendingSync.push(op);
+      operacionsPendents.push(op);
       continue;
     }
 
     try {
-      const resp = await fetch(`http://localhost:3000/tasks/${tascaLocal.id}`, {
+      const resposta = await fetch(`http://localhost:3000/tasks/${tascaLocal.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -128,217 +105,172 @@ async function sincronitzar() {
           completed: tascaLocal.completada
         })
       });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      // Si salió bien, no hacemos nada más
+
+      if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+
     } catch (error) {
-      console.error("Error sincronitzant UPDATE:", error);
-      pendingSync.push(op);
+      console.error("Error sincronitzant (actualitzar):", error);
+      operacionsPendents.push(op);
     }
   }
 
-  // 3) PROCESAR “delete”
-  for (const op of opsPendents) {
+  // 3. Esborrar
+  for (const op of operacionsAProcessar) {
     if (op.accio !== "delete") continue;
     const tascaLocal = op.tasca;
 
-    // Si ID negativo, nunca existió en servidor: no reencolamos ni llamamos a DELETE
-    if (tascaLocal.id < 0) {
-      continue;
-    }
+    if (tascaLocal.id < 0) continue;
 
     try {
-      const resp = await fetch(`http://localhost:3000/tasks/${tascaLocal.id}`, {
+      const resposta = await fetch(`http://localhost:3000/tasks/${tascaLocal.id}`, {
         method: "DELETE"
       });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+
     } catch (error) {
-      console.error("Error sincronitzant DELETE:", error);
-      pendingSync.push(op);
+      console.error("Error sincronitzant (esborrar):", error);
+      operacionsPendents.push(op);
     }
   }
 
-  // Guardamos el estado resultante
   guardarTasques();
 }
 
-/**
- * Actualiza el indicador visual de conexión (verde/rojo) y, si hay conexión,
- * sincroniza y recarga tareas.
- */
-async function updateConnectionStatus() {
+/** Actualitza l'estat de la connexió i sincronitza si cal */
+async function actualitzarEstatConnexio() {
   if (navigator.onLine) {
-    connectionStatus.textContent = "Estàs en línia. Sincronitzant...";
-    connectionStatus.className = "syncing";
+    indicadorConnexio.textContent = "Estàs en línia. Sincronitzant...";
+    indicadorConnexio.className = "syncing";
 
     await sincronitzar();
-    await fetchTareasServidor();
+    await obtenirTasquesDelServidor();
     renderitzarTasques();
 
-    connectionStatus.textContent = "Conectado";
-    connectionStatus.className = "online";
+    indicadorConnexio.textContent = "Connectat";
+    indicadorConnexio.className = "online";
   } else {
-    connectionStatus.textContent = "Estàs fora de línia. Els canvis es guardaran localment.";
-    connectionStatus.className = "offline";
+    indicadorConnexio.textContent = "Estàs fora de línia. Els canvis es guardaran localment.";
+    indicadorConnexio.className = "offline";
   }
 }
 
-/**
- * Renderitza la llista de tasques en el DOM, aplicant ordenació si la hay.
- */
+/** Renderitza la llista de tasques al DOM */
 function renderitzarTasques() {
-  taskList.innerHTML = "";
+  llistaTasquesDOM.innerHTML = "";
 
-  tasques.forEach((tasca, index) => {
+  llistaTasques.forEach((tasca, index) => {
     const li = document.createElement("li");
 
-    // Texto de la tarea (span)
     const span = document.createElement("span");
     span.textContent = tasca.nom;
     if (tasca.completada) span.classList.add("completed");
 
-    // Botón Completar/Desfer
     const botoCompletar = document.createElement("button");
     botoCompletar.textContent = tasca.completada ? "Desfer" : "Completa";
     botoCompletar.className = "complete";
     botoCompletar.onclick = () => {
-      // Toggle completada
-      tasques[index].completada = !tasques[index].completada;
-      // Encolamos la actualización
-      pendingSync.push({ accio: "update", tasca: tasques[index] });
+      llistaTasques[index].completada = !llistaTasques[index].completada;
+      operacionsPendents.push({ accio: "update", tasca: llistaTasques[index] });
       guardarTasques();
       renderitzarTasques();
-      if (navigator.onLine) {
-        // Sincronizamos de inmediato
-        updateConnectionStatus();
-      }
+      if (navigator.onLine) actualitzarEstatConnexio();
     };
 
-    // Botón Editar (abre modal)
     const botoEditar = document.createElement("button");
     botoEditar.textContent = "Edita";
     botoEditar.className = "edit";
     botoEditar.onclick = () => obrirModalEdicio(index);
 
-    // Botón Eliminar
     const botoEliminar = document.createElement("button");
     botoEliminar.textContent = "Elimina";
     botoEliminar.className = "delete";
     botoEliminar.onclick = () => {
-      const tascaABorrar = tasques[index];
-      // Quitamos localmente
-      tasques.splice(index, 1);
-      // Encolamos DELETE
-      pendingSync.push({ accio: "delete", tasca: tascaABorrar });
+      const tascaEsborrar = llistaTasques[index];
+      llistaTasques.splice(index, 1);
+      operacionsPendents.push({ accio: "delete", tasca: tascaEsborrar });
       guardarTasques();
       renderitzarTasques();
-      if (navigator.onLine) {
-        updateConnectionStatus();
-      }
+      if (navigator.onLine) actualitzarEstatConnexio();
     };
 
     li.appendChild(span);
     li.appendChild(botoCompletar);
     li.appendChild(botoEditar);
     li.appendChild(botoEliminar);
-    taskList.appendChild(li);
+    llistaTasquesDOM.appendChild(li);
   });
 }
 
-/**
- * Manejo del modal de edición: muestra el input con el texto actual.
- * @param {number} index - índice de la tarea a editar en `tasques`
- */
+/** Mostra el modal d'edició amb la tasca seleccionada */
 function obrirModalEdicio(index) {
-  indexEdicio = index;
-  editInput.value = tasques[index].nom;
-  editModal.classList.remove("hidden");
-  editInput.focus();
+  indexTascaEnEdicio = index;
+  entradaEdicio.value = llistaTasques[index].nom;
+  modalEdicio.classList.remove("hidden");
+  entradaEdicio.focus();
 }
 
-/**
- * Cierra el modal sin guardar cambios.
- */
-cancelEdit.addEventListener("click", () => {
-  editModal.classList.add("hidden");
-  indexEdicio = null;
+/** Tanca el modal d'edició */
+botoCancel·larEdicio.addEventListener("click", () => {
+  modalEdicio.classList.add("hidden");
+  indexTascaEnEdicio = null;
 });
 
-/**
- * Guarda la edición de la tarea, encolando el “update”.
- */
-saveEdit.addEventListener("click", () => {
-  const nouNom = editInput.value.trim();
-  if (nouNom !== "" && indexEdicio !== null) {
-    tasques[indexEdicio].nom = nouNom;
-    // Encolamos la actualización
-    pendingSync.push({ accio: "update", tasca: tasques[indexEdicio] });
+/** Desa els canvis de l'edició */
+botoGuardarEdicio.addEventListener("click", () => {
+  const nouNom = entradaEdicio.value.trim();
+  if (nouNom !== "" && indexTascaEnEdicio !== null) {
+    llistaTasques[indexTascaEnEdicio].nom = nouNom;
+    operacionsPendents.push({ accio: "update", tasca: llistaTasques[indexTascaEnEdicio] });
     guardarTasques();
     renderitzarTasques();
-    if (navigator.onLine) {
-      updateConnectionStatus();
-    }
+    if (navigator.onLine) actualitzarEstatConnexio();
   }
-  editModal.classList.add("hidden");
-  indexEdicio = null;
+  modalEdicio.classList.add("hidden");
+  indexTascaEnEdicio = null;
 });
 
-/**
- * Ordena las tareas por estado (alternando asc/desc).
- */
-let estatAscendente = true;
-ordenarCompletes.addEventListener("click", () => {
-  if (estatAscendente) {
-    tasques.sort((a, b) => a.completada - b.completada);
-  } else {
-    tasques.sort((a, b) => b.completada - a.completada);
-  }
-  estatAscendente = !estatAscendente;
+/** Ordenació per estat (completades/incompletes) */
+let ordenarPerEstatAsc = true;
+botoOrdenarCompletes.addEventListener("click", () => {
+  llistaTasques.sort((a, b) =>
+    ordenarPerEstatAsc ? a.completada - b.completada : b.completada - a.completada
+  );
+  ordenarPerEstatAsc = !ordenarPerEstatAsc;
   guardarTasques();
   renderitzarTasques();
 });
 
-/**
- * Ordena las tareas por fecha (alternando asc/desc).
- */
-let dataAscendente = true;
-ordenarData.addEventListener("click", () => {
-  if (dataAscendente) {
-    tasques.sort((a, b) => new Date(a.data) - new Date(b.data));
-  } else {
-    tasques.sort((a, b) => new Date(b.data) - new Date(a.data));
-  }
-  dataAscendente = !dataAscendente;
+/** Ordenació per data */
+let ordenarPerDataAsc = true;
+botoOrdenarPerData.addEventListener("click", () => {
+  llistaTasques.sort((a, b) =>
+    ordenarPerDataAsc ? new Date(a.data) - new Date(b.data) : new Date(b.data) - new Date(a.data)
+  );
+  ordenarPerDataAsc = !ordenarPerDataAsc;
   guardarTasques();
   renderitzarTasques();
 });
 
-/**
- * Al cargar la página (load), inicializamos estado, 
- * procesamos sincronización y obtenemos del servidor si estamos online.
- */
+/** Inicialització quan es carrega la pàgina */
 window.addEventListener("load", async () => {
-  updateConnectionStatus();   // Actualiza indicador y, si hay conexión, sincroniza+fetch
+  actualitzarEstatConnexio();
   if (navigator.onLine) {
-    // Ya dentro de updateConnectionStatus() se llama a sincronitzar() y fetch
-    // Pero nos aseguramos de que se renderice tras esa llamada
-    await fetchTareasServidor();
+    await obtenirTasquesDelServidor();
   }
   renderitzarTasques();
 });
 
-// Listeners de eventos online/offline
-window.addEventListener("online",  updateConnectionStatus);
-window.addEventListener("offline", updateConnectionStatus);
+/** Escolta canvis d'estat de connexió */
+window.addEventListener("online", actualitzarEstatConnexio);
+window.addEventListener("offline", actualitzarEstatConnexio);
 
-/**
- * Lógicamente, el envío de nuevas tareas también se encolará.
- */
-taskForm.addEventListener("submit", function (e) {
+/** Afegeix una nova tasca */
+formulariTasca.addEventListener("submit", function (e) {
   e.preventDefault();
-  const nomTasca = taskInput.value.trim();
+  const nomTasca = entradaNomTasca.value.trim();
   if (nomTasca === "") return;
 
-  // ID temporal negativo
   const idTemporal = -Date.now();
   const novaTasca = {
     id: idTemporal,
@@ -347,13 +279,13 @@ taskForm.addEventListener("submit", function (e) {
     data: new Date().toISOString()
   };
 
-  tasques.push(novaTasca);
-  pendingSync.push({ accio: "add", tasca: novaTasca });
+  llistaTasques.push(novaTasca);
+  operacionsPendents.push({ accio: "add", tasca: novaTasca });
   guardarTasques();
   renderitzarTasques();
-  taskInput.value = "";
+  entradaNomTasca.value = "";
 
   if (navigator.onLine) {
-    updateConnectionStatus();
+    actualitzarEstatConnexio();
   }
 });
